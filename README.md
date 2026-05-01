@@ -32,56 +32,6 @@ A personal fabrication project by **Spencer**. This repo documents the build pro
 └── photos/           # Progress shots and finished product
 ```
 
----
-
-## `// machine setup`
-
-| Machine | Spec |
-|---|---|
-| CNC Router | `[ your machine ]` |
-| 3D Printer | `[ your printer ]` |
-| Laser / Engraver | `[ your engraver ]` |
-| CAD / CAM | `[ your software ]` |
-
----
-
-## `// materials`
-
-> Replace with project-specific info
-
-- **Stock:** `[ wood / aluminum / acrylic / etc. ]`
-- **Filament:** `[ PLA / PETG / ASA — brand + color ]`
-- **Fasteners / hardware:** `[ list any non-obvious hardware ]`
-
----
-
-## `// settings`
-
-> Machine-specific — your results will vary. Verify before running.
-
-### CNC
-| Parameter | Value |
-|---|---|
-| Endmill | `[ size / type ]` |
-| Feed Rate | `[ ipm or mm/min ]` |
-| Stepover | `[ % ]` |
-| Depth per Pass | `[ in or mm ]` |
-| Spindle Speed | `[ RPM ]` |
-
-### 3D Print
-| Parameter | Value |
-|---|---|
-| Layer Height | `[ mm ]` |
-| Infill | `[ % / pattern ]` |
-| Supports | `[ yes / no / where ]` |
-| Nozzle Temp | `[ °C ]` |
-| Bed Temp | `[ °C ]` |
-
----
-
-## `// build notes`
-
-<!-- Add project-specific notes here. What went wrong, what worked, what you'd do differently. -->
 
 ---
 
@@ -93,7 +43,7 @@ A personal fabrication project by **Spencer**. This repo documents the build pro
 
 ## `// license`
 
-MIT — fork it, improve it, build cool stuff.
+MIT — fork it, improve it, build cool stuff. _fork yeah_
 
 ---
 
