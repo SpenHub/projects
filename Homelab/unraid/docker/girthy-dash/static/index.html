@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>girthy monitor</title>
+<meta name="theme-color" content="#000000">
+<link rel="preload" href="fonts/atkinson-hyperlegible-next-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-mono-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>girthy</h1>
+      <div class="sub" id="hostline">Connecting…</div>
+    </div>
+    <div class="top-right">
+      <span class="live" id="live"><span class="ico idle">…</span><span>Connecting</span></span>
+      <nav class="tabs" aria-label="Pages"><a href="./" aria-current="page">Home</a><a href="storage">Storage</a><a href="docker">Docker</a></nav>
+      <div class="theme-picker" role="group" aria-label="Accent color">
+        <span class="theme-picker-label">Accent</span>
+        <div class="swatches" id="swatches"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="filters" role="toolbar" aria-label="Chart range">
+    <span class="flabel">Range</span>
+    <div class="seg" id="range"></div>
+  </div>
+
+  <div class="notices" id="notices"></div>
+
+  <section class="tiles" id="tiles" aria-label="Summary"></section>
+
+  <main class="grid">
+    <article class="card">
+      <div class="card-head"><h2>CPU</h2><span class="meta" id="cpu-meta"></span></div>
+      <div id="cpu-chart"></div>
+      <h3 class="sub-h">Per thread · now</h3>
+      <div class="cores" id="cpu-cores"></div>
+      <dl class="facts" id="cpu-facts"></dl>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><h2>iGPU</h2><span class="meta" id="gpu-meta">Intel UHD 630 · Quick Sync</span></div>
+      <div id="gpu-chart"></div>
+      <h3 class="sub-h">Engines · now</h3>
+      <div id="gpu-engines"></div>
+      <dl class="facts" id="gpu-facts"></dl>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><h2>Memory</h2><span class="meta" id="mem-meta"></span></div>
+      <div id="mem-chart"></div>
+      <dl class="facts" id="mem-facts"></dl>
+      <h3 class="sub-h">Swap</h3>
+      <div id="swap"></div>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><h2>/transcode RAM disk</h2><span class="meta">host /dev/shm · used by Plex</span></div>
+      <div id="shm-usage"></div>
+      <div id="shm-chart"></div>
+      <dl class="facts" id="shm-facts"></dl>
+    </article>
+
+    <article class="card wide">
+      <div class="card-head"><h2>Network</h2><span class="meta" id="net-meta"></span></div>
+      <div class="net-top" id="net-top"></div>
+      <div class="split">
+        <div>
+          <h3 class="sub-h">Internet · last 24 hours</h3>
+          <div class="strip" id="strip-24h" style="grid-template-columns: repeat(96, minmax(0, 1fr));"></div>
+          <div class="strip-axis"><span>24h ago</span><span>12h</span><span>now</span></div>
+        </div>
+        <div>
+          <h3 class="sub-h">Internet · last 30 days</h3>
+          <div class="strip" id="strip-30d" style="grid-template-columns: repeat(30, minmax(0, 1fr));"></div>
+          <div class="strip-axis"><span>30d ago</span><span>15d</span><span>today</span></div>
+        </div>
+      </div>
+      <div class="strip-legend">
+        <span><i class="sw" style="background:var(--good)"></i>All checks up</span>
+        <span><i class="sw" style="background:var(--serious)"></i>Some checks failed</span>
+        <span><i class="sw" style="background:var(--crit)"></i>Down</span>
+        <span><i class="sw" style="background:var(--grid)"></i>No data</span>
+      </div>
+      <div class="split" style="margin-top: 8px;">
+        <div>
+          <h3 class="sub-h">Latency</h3>
+          <div id="lat-chart"></div>
+        </div>
+        <div>
+          <h3 class="sub-h">Throughput</h3>
+          <div id="nic-chart"></div>
+        </div>
+      </div>
+      <h3 class="sub-h">Recent internet outages</h3>
+      <ul class="outages" id="outages"></ul>
+    </article>
+
+    <article class="card wide">
+      <div class="card-head"><h2>Storage</h2><span class="meta" id="storage-meta"></span></div>
+      <div id="array-usage"></div>
+      <div class="table-wrap"><table id="disks"></table></div>
+    </article>
+
+    <article class="card wide">
+      <div class="card-head"><h2>Docker</h2><span class="meta" id="docker-meta"></span></div>
+      <div id="docker-usage"></div>
+      <div class="table-wrap"><table id="containers"></table></div>
+    </article>
+  </main>
+</div>
+<div id="tip" hidden role="status"></div>
+
+<script src="common.js"></script>
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ line chart */
+class LineChart {
+  constructor(host, opts) {
+    this.series = opts.series;               // [{key, name, color}]
+    this.fmt = opts.fmt;                     // value formatter
+    this.yMax = opts.yMax ?? null;           // fixed max, or null for auto
+    this.yFloor = opts.yFloor ?? 1;          // smallest auto max
+    this.height = opts.height || 160;
+    this.label = opts.label;
+    this.wrap = el("div", { class: "chart" }, host);
+    if (this.series.length > 1) {
+      const lg = el("div", { class: "legend" }, this.wrap);
+      for (const s of this.series) {
+        const i = el("span", {}, lg);
+        el("i", { class: "lkey", style: `background: var(${s.color})` }, i);
+        i.append(s.name);
+      }
+    }
+    this.plot = el("div", { class: "chart-plot" }, this.wrap);
+    this.plot.style.height = this.height + "px";
+    this.pointer = null;
+    this.kIdx = null;
+    new ResizeObserver(() => this.render()).observe(this.plot);
+  }
+  set(d) { this.d = d; this.render(); }
+  render() {
+    const d = this.d, W = this.plot.clientWidth, H = this.height;
+    if (!d || !W) return;
+    const m = { l: 46, r: 10, t: 8, b: 22 };
+    const iw = Math.max(10, W - m.l - m.r), ih = H - m.t - m.b;
+    const span = d.end - d.start;
+    const svg = sv("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", tabindex: "0", "aria-label": this.label });
+
+    let ymax = this.yMax;
+    if (ymax == null) {
+      let mx = 0;
+      for (const s of this.series) for (const v of d.series[s.key] || []) if (v != null && v > mx) mx = v;
+      ymax = niceMax(mx, this.yFloor);
+    }
+    const x = (t) => m.l + ((t - d.start) / span) * iw;
+    const y = (v) => m.t + ih - (Math.max(0, Math.min(v, ymax)) / ymax) * ih;
+    this.geo = { x, y, m, iw, ih, span };
+
+    for (const v of [0, ymax / 2, ymax]) {
+      sv("line", { class: v === 0 ? "baseline" : "gridline", x1: m.l, x2: W - m.r, y1: Math.round(y(v)) + 0.5, y2: Math.round(y(v)) + 0.5 }, svg);
+      sv("text", { class: "axis", x: m.l - 8, y: y(v) + 4, "text-anchor": "end", text: this.fmt(v, true) }, svg);
+    }
+    for (let i = 0; i <= 4; i++) {
+      const t = d.start + (span * i) / 4;
+      sv("text", { class: "axis", x: x(t), y: H - 5, "text-anchor": i === 0 ? "start" : i === 4 ? "end" : "middle",
+        text: i === 4 ? "now" : fmtTick(t, span) }, svg);
+    }
+
+    const gap = (d.step || 3) * 2.5;
+    let any = false;
+    for (const s of this.series) {
+      const vals = d.series[s.key] || [];
+      const segs = [];
+      let cur = [];
+      for (let i = 0; i < d.t.length; i++) {
+        const v = vals[i];
+        if (v == null || (i > 0 && d.t[i] - d.t[i - 1] > gap)) { if (cur.length) segs.push(cur); cur = []; }
+        if (v != null) cur.push([x(d.t[i]), y(v)]);
+      }
+      if (cur.length) segs.push(cur);
+      for (const seg of segs) {
+        any = true;
+        const line = seg.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join("");
+        if (this.series.length === 1) {
+          const area = line + `L${seg[seg.length - 1][0].toFixed(1)} ${m.t + ih}L${seg[0][0].toFixed(1)} ${m.t + ih}Z`;
+          sv("path", { d: area, style: `fill: var(${s.color}); opacity: .1` }, svg);
+        }
+        if (seg.length === 1) sv("circle", { cx: seg[0][0], cy: seg[0][1], r: 2, style: `fill: var(${s.color})` }, svg);
+        sv("path", { class: "series", d: line, style: `color: var(${s.color}); stroke: currentColor` }, svg);
+      }
+      for (let i = vals.length - 1; i >= 0; i--) {
+        if (vals[i] != null) {
+          if (d.end - d.t[i] < gap + (d.step || 3)) sv("circle", { class: "dot", cx: x(d.t[i]), cy: y(vals[i]), r: 4, style: `fill: var(${s.color})` }, svg);
+          break;
+        }
+      }
+    }
+    if (!any) sv("text", { class: "empty-msg", x: m.l + iw / 2, y: m.t + ih / 2, "text-anchor": "middle", text: "Collecting data…" }, svg);
+
+    this.cross = sv("line", { class: "cross", y1: m.t, y2: m.t + ih, visibility: "hidden" }, svg);
+    this.hdots = this.series.map((s) => sv("circle", { class: "dot", r: 4, visibility: "hidden", style: `fill: var(${s.color})` }, svg));
+    const hit = sv("rect", { x: m.l, y: 0, width: iw, height: H, fill: "transparent" }, svg);
+    hit.addEventListener("pointermove", (e) => { this.pointer = { x: e.clientX, y: e.clientY }; this.hover(); });
+    hit.addEventListener("pointerleave", () => { this.pointer = null; this.unhover(); });
+    svg.addEventListener("keydown", (e) => this.key(e));
+    svg.addEventListener("blur", () => { this.kIdx = null; this.unhover(); });
+    this.svg = svg;
+    this.plot.replaceChildren(svg);
+    if (this.pointer) this.hover();
+  }
+  nearest(t) {
+    const ts = this.d.t;
+    if (!ts.length) return -1;
+    let lo = 0, hi = ts.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (ts[mid] < t) lo = mid; else hi = mid; }
+    return Math.abs(ts[lo] - t) <= Math.abs(ts[hi] - t) ? lo : hi;
+  }
+  hover() {
+    const r = this.svg.getBoundingClientRect();
+    const { m, iw, span } = this.geo;
+    const t = this.d.start + ((this.pointer.x - r.left - m.l) / iw) * span;
+    this.show(this.nearest(t), this.pointer.x, this.pointer.y);
+  }
+  key(e) {
+    if (!this.d.t.length || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const n = this.d.t.length;
+    if (this.kIdx == null) this.kIdx = n - 1;
+    else if (e.key === "ArrowLeft") this.kIdx = Math.max(0, this.kIdx - 1);
+    else if (e.key === "ArrowRight") this.kIdx = Math.min(n - 1, this.kIdx + 1);
+    else if (e.key === "Home") this.kIdx = 0;
+    else this.kIdx = n - 1;
+    const r = this.svg.getBoundingClientRect();
+    this.show(this.kIdx, r.left + this.geo.x(this.d.t[this.kIdx]), r.top + 20);
+  }
+  show(i, cx, cy) {
+    if (i < 0) return;
+    const { x, y } = this.geo, t = this.d.t[i], px = x(t);
+    this.cross.setAttribute("x1", px); this.cross.setAttribute("x2", px);
+    this.cross.setAttribute("visibility", "visible");
+    this.series.forEach((s, k) => {
+      const v = (this.d.series[s.key] || [])[i];
+      const dot = this.hdots[k];
+      if (v == null) { dot.setAttribute("visibility", "hidden"); return; }
+      dot.setAttribute("cx", px); dot.setAttribute("cy", y(v)); dot.setAttribute("visibility", "visible");
+    });
+    showTip(cx, cy, (p) => {
+      tipTitle(p, this.geo.span > 86400 ? fmtWhen(t) : fmtClock(t, this.geo.span <= 3600));
+      for (const s of this.series) {
+        const v = (this.d.series[s.key] || [])[i];
+        tipRow(p, s.color, v == null ? "—" : this.fmt(v), this.series.length > 1 ? s.name : this.label);
+      }
+    });
+  }
+  unhover() {
+    if (this.cross) this.cross.setAttribute("visibility", "hidden");
+    for (const d of this.hdots || []) d.setAttribute("visibility", "hidden");
+    hideTip();
+  }
+}
+
+/* ------------------------------------------------------------------ setup */
+const RANGES = ["5m", "15m", "1h", "6h", "24h", "7d"];
+let range = RANGES.includes(store.get("gd-range")) ? store.get("gd-range") : "1h";
+const seg = $("range");
+for (const r of RANGES) {
+  const b = el("button", { type: "button", text: r, "aria-pressed": String(r === range) }, seg);
+  b.addEventListener("click", () => {
+    range = r; store.set("gd-range", r);
+    for (const x of seg.children) x.setAttribute("aria-pressed", String(x.textContent === r));
+    pollHistory(true);
+  });
+}
+
+
+
+const pctFmt = (v) => v.toFixed(0) + "%";
+const charts = {
+  cpu: new LineChart($("cpu-chart"), { label: "CPU usage", series: [{ key: "cpu", name: "CPU", color: "--s1" }], yMax: 100, fmt: pctFmt }),
+  gpu: new LineChart($("gpu-chart"), { label: "iGPU engine busy", yMax: 100, fmt: pctFmt, series: [
+    { key: "gpu_video", name: "Video (Quick Sync)", color: "--s1" },
+    { key: "gpu_render", name: "Render/3D", color: "--s2" },
+    { key: "gpu_enhance", name: "VideoEnhance", color: "--s3" },
+    { key: "gpu_blitter", name: "Blitter", color: "--s4" }] }),
+  mem: new LineChart($("mem-chart"), { label: "Memory used", series: [{ key: "mem", name: "Memory", color: "--s1" }], yMax: 100, fmt: pctFmt }),
+  shm: new LineChart($("shm-chart"), { label: "/transcode used", series: [{ key: "transcode", name: "/transcode", color: "--s1" }], yFloor: 5, height: 130,
+    fmt: (v, axis) => (axis ? v.toFixed(v < 10 && v % 1 ? 1 : 0) : v.toFixed(1)) + "%" }),
+  lat: new LineChart($("lat-chart"), { label: "Latency", fmt: (v, axis) => (axis ? v.toFixed(0) + " ms" : fmtMs(v)), yFloor: 10, series: [
+    { key: "gw", name: "Router", color: "--s1" },
+    { key: "inet", name: "Internet", color: "--s2" }] }),
+  nic: new LineChart($("nic-chart"), { label: "Throughput", fmt: fmtBits, yFloor: 1e6, series: [
+    { key: "rx", name: "Received", color: "--s1" },
+    { key: "tx", name: "Sent", color: "--s2" }] }),
+};
+
+/* ------------------------------------------------------------------ render: now */
+let last = null, lastOk = 0, fetchError = null;
+
+function renderLive() {
+  const live = $("live");
+  live.replaceChildren();
+  const age = lastOk ? (Date.now() - lastOk) / 1000 : Infinity;
+  if (fetchError && age > 10) { statusIcon("crit", live); el("span", { text: "Can't reach the dashboard" }, live); }
+  else if (age > 12) { statusIcon("warn", live); el("span", { text: `Stale · ${fmtDur(age)} ago` }, live); }
+  else if (lastOk) { statusIcon("good", live); el("span", { text: "Live" }, live); }
+  else { statusIcon("idle", live); el("span", { text: "Connecting" }, live); }
+}
+
+function tile(host, { label, value, valueIcon, sub, pct, warn, crit, aside }) {
+  const t = el("div", { class: "tile" }, host);
+  const l = el("div", { class: "label" }, t);
+  el("span", { text: label }, l);
+  if (aside) el("span", { text: aside, style: "color: var(--muted); font-weight: 400" }, l);
+  const v = el("div", { class: "value" }, t);
+  if (valueIcon) statusIcon(valueIcon, v, true);
+  v.append(value);
+  el("div", { class: "sub", text: sub || " ", title: sub || "" }, t);
+  if (pct !== undefined) t.appendChild(meter(pct, { warn, crit, label }));
+}
+
+function renderTiles(n) {
+  const host = $("tiles");
+  host.replaceChildren();
+  const cpu = n.cpu, mem = n.memory, gpu = n.gpu, t = n.temps || {};
+  tile(host, { label: "CPU", value: cpu ? fmtPct(cpu.pct) : "—", pct: cpu ? cpu.pct : null,
+    sub: cpu ? [cpu.mhz_avg ? (cpu.mhz_avg / 1000).toFixed(2) + " GHz avg" : null, t.cpu != null ? Math.round(t.cpu) + " °C" : null].filter(Boolean).join(" · ") : "" });
+  tile(host, { label: "Memory", value: mem ? fmtPct(mem.pct) : "—", pct: mem ? mem.pct : null,
+    sub: mem ? `${fmtBytes(mem.used)} of ${fmtBytes(mem.total)}` : "" });
+  if (mem && !mem.swap_total) tile(host, { label: "Swap", value: "Off", valueIcon: "idle", sub: "No swap configured" });
+  else tile(host, { label: "Swap", value: mem ? fmtPct(mem.swap_pct) : "—", pct: mem ? mem.swap_pct : null, warn: 25, crit: 75,
+    sub: mem ? `${fmtBytes(mem.swap_used)} of ${fmtBytes(mem.swap_total)}` : "" });
+  if (gpu && !gpu.error) {
+    const e = gpu.engines || {};
+    tile(host, { label: "iGPU", aside: "video engine", value: fmtPct(e.video), pct: Math.max(e.video || 0, e.render || 0),
+      sub: `${gpuAsleep(gpu) ? "Asleep" : Math.round(gpu.freq || 0) + " MHz"} · 3D ${fmtPct(e.render)}` });
+  } else tile(host, { label: "iGPU", value: "—", valueIcon: gpu ? "warn" : "idle", sub: gpu ? "Unavailable" : "Starting…" });
+  const shm = n.transcode;
+  tile(host, { label: "/transcode", value: shm ? fmtPct(shm.pct) : "—", pct: shm ? shm.pct : null, warn: 70, crit: 90,
+    sub: shm ? `${fmtBytes(shm.used)} of ${fmtBytes(shm.total)}` : "" });
+  const st = n.storage;
+  const apct = st && st.total ? (st.used / st.total) * 100 : null;
+  tile(host, { label: "Array", value: fmtPct(apct), pct: apct, warn: 90, crit: 97,
+    sub: st && st.total ? `${fmtBytes(st.free)} free of ${fmtBytes(st.total)}` : "" });
+  const di = n.docker_img;
+  tile(host, { label: "docker.img", value: di ? fmtPct(di.pct) : "—", pct: di ? di.pct : null, warn: 75, crit: 90,
+    sub: di ? `${fmtBytes(di.used)} of ${fmtBytes(di.total)}` : "" });
+  const net = n.net;
+  if (net) tile(host, { label: "Internet", value: net.inet_ok ? "Online" : "Down", valueIcon: net.inet_ok ? "good" : "crit",
+    sub: `${fmtUptimePct(net.pct_24h)} up · 24h · ${fmtMs(net.inet_ms)}` });
+  else tile(host, { label: "Internet", value: "—", valueIcon: "idle", sub: "First check pending" });
+}
+
+function renderCpu(n) {
+  const cpu = n.cpu, t = n.temps || {};
+  const model = (n.host.cpu_model || "").replace(/\(R\)|\(TM\)|CPU|@.*$/g, "").replace(/\s+/g, " ").trim();
+  $("cpu-meta").textContent = [model, cpu ? cpu.threads.length + " threads" : null].filter(Boolean).join(" · ");
+  const cores = $("cpu-cores");
+  if (!cpu) return;
+  cores.style.gridTemplateColumns = `repeat(${cpu.threads.length}, minmax(0, 1fr))`;
+  if (cores.children.length !== cpu.threads.length) {
+    cores.replaceChildren();
+    cpu.threads.forEach((_, i) => {
+      const c = el("div", { class: "core", tabindex: "0" }, cores);
+      const col = el("div", { class: "col" }, c);
+      el("div", { class: "fill" }, col);
+      el("span", { class: "lbl", text: String(i) }, c);
+      hoverable(c, (p) => { tipTitle(p, `Thread ${i}`); tipRow(p, "--s1", fmtPct(last.cpu.threads[i], 1), "busy"); });
+    });
+  }
+  cpu.threads.forEach((v, i) => {
+    const c = cores.children[i];
+    const f = c.querySelector(".fill");
+    f.style.height = Math.max(0, Math.min(100, v)) + "%";
+    f.className = "fill " + sev(v, 90, 98);
+    c.setAttribute("aria-label", `Thread ${i}: ${v.toFixed(0)}% busy`);
+  });
+  setFacts($("cpu-facts"), [
+    ["Average clock", cpu.mhz_avg ? (cpu.mhz_avg / 1000).toFixed(2) + " GHz" : "—"],
+    ["Fastest core", cpu.mhz_max ? (cpu.mhz_max / 1000).toFixed(2) + " GHz" : "—"],
+    ["Package temp", t.cpu != null ? Math.round(t.cpu) + " °C" : "—"],
+    ["Load (1/5/15m)", cpu.load ? cpu.load.map((x) => x.toFixed(2)).join(" ") : "—"],
+  ]);
+}
+
+/* the i915 GPU runtime-suspends when idle: clock and RC6 both read 0 */
+const gpuAsleep = (g) => !g.freq && !g.rc6 && !Object.values(g.engines || {}).some((v) => v > 0);
+const ENGINES = [["video", "Video", "--s1"], ["render", "Render/3D", "--s2"], ["enhance", "VideoEnhance", "--s3"], ["blitter", "Blitter", "--s4"]];
+function renderGpu(n) {
+  const g = n.gpu, host = $("gpu-engines");
+  host.replaceChildren();
+  if (!g || g.error) {
+    const msg = el("div", { class: "notice" }, host);
+    statusIcon(g ? "warn" : "idle", msg);
+    el("span", { text: g ? `iGPU stats unavailable: ${g.error}` : "Waiting for the first iGPU sample…" }, msg);
+    setFacts($("gpu-facts"), []);
+    return;
+  }
+  for (const [k, name, color] of ENGINES) {
+    const v = (g.engines || {})[k];
+    const r = el("div", { class: "engine" }, host);
+    const nm = el("span", { class: "name" }, r);
+    el("i", { class: "lkey", style: `background: var(${color})` }, nm);
+    nm.append(name);
+    r.appendChild(meter(v, { label: name, warn: 90, crit: 98 }));
+    el("span", { class: "num", text: fmtPct(v) }, r);
+  }
+  const asleep = gpuAsleep(g);
+  setFacts($("gpu-facts"), [
+    ["Clock", asleep ? "Asleep" : g.freq_max ? `${Math.round(g.freq || 0)} / ${g.freq_max} MHz` : `${Math.round(g.freq || 0)} MHz`],
+    ["GPU power", g.power != null ? g.power.toFixed(1) + " W" : "—"],
+    ["CPU package power", g.package_power != null ? g.package_power.toFixed(1) + " W" : "—"],
+    ["Idle (RC6)", asleep ? "Powered down" : fmtPct(g.rc6)],
+  ]);
+}
+
+function renderMemory(n) {
+  const m = n.memory;
+  if (!m) return;
+  $("mem-meta").textContent = `${fmtBytes(m.total)} total`;
+  setFacts($("mem-facts"), [
+    ["Used by apps", fmtBytes(m.used)],
+    ["Cache & buffers", fmtBytes(m.cache)],
+    ["Available", fmtBytes(m.available)],
+    ["Used", fmtPct(m.pct, 1)],
+  ]);
+  const sw = $("swap");
+  sw.replaceChildren();
+  if (!m.swap_total) {
+    const p = el("div", { class: "empty-note" }, sw);
+    pill("idle", "Not configured", p);
+    p.append(" — Unraid runs without swap by default; memory pressure goes straight to the OOM killer.");
+  } else usageRow(sw, "Swap", m.swap_used, m.swap_total, m.swap_pct, { warn: 25, crit: 75 });
+}
+
+function renderShm(n) {
+  const s = n.transcode;
+  if (!s) return;
+  usageRow($("shm-usage"), "/transcode", s.used, s.total, s.pct, { warn: 70, crit: 90 });
+  setFacts($("shm-facts"), [
+    ["Used", fmtBytes(s.used)],
+    ["Free", fmtBytes(s.free)],
+    ["Size limit", fmtBytes(s.total)],
+  ]);
+}
+
+function stripCells(host, cells, fmtRange) {
+  if (host.children.length !== cells.length) {
+    host.replaceChildren();
+    cells.forEach((_, i) => {
+      const c = el("div", { class: "cell", tabindex: "0" }, host);
+      hoverable(c, (p) => {
+        const cell = host._cells[i];
+        tipTitle(p, fmtRange(cell));
+        if (!cell.checks) tipRow(p, null, "No data", "");
+        else {
+          tipRow(p, null, fmtUptimePct((cell.ok / cell.checks) * 100), "up");
+          tipRow(p, null, String(cell.checks - cell.ok), cell.checks - cell.ok === 1 ? "failed check" : "failed checks");
+        }
+      });
+    });
+  }
+  host._cells = cells;
+  cells.forEach((cell, i) => {
+    const kind = !cell.checks ? "" : cell.ok === cell.checks ? "good" : cell.ok === 0 ? "down" : "partial";
+    const c = host.children[i];
+    c.className = "cell " + kind;
+    c.setAttribute("aria-label", `${fmtRange(cell)}: ${cell.checks ? fmtUptimePct((cell.ok / cell.checks) * 100) + " up" : "no data"}`);
+  });
+}
+
+function renderNet(n) {
+  const net = n.net, nic = n.nic;
+  $("net-meta").textContent = [nic ? nic.iface : null, net && net.gateway ? `router ${net.gateway}` : null,
+    net ? `checks every ${net.interval >= 60 ? Math.round(net.interval / 60) + " min" : net.interval + "s"}` : null].filter(Boolean).join(" · ");
+  const top = $("net-top");
+  top.replaceChildren();
+  if (!net) { el("div", { class: "empty-note", text: "Waiting for the first network check…" }, top); return; }
+
+  const st = el("div", { class: "net-status" }, top);
+  const big = el("div", { class: "big" }, st);
+  const gwDown = net.gw_ok === false;
+  statusIcon(net.inet_ok ? "good" : "crit", big, true);
+  big.append(net.inet_ok ? "Online" : gwDown ? "Router unreachable" : "Internet down");
+  if (net.since) {
+    el("div", { class: "since", text: net.since_is_start
+      ? `No outages since monitoring began ${fmtDur(n.now - net.since)} ago`
+      : `${net.inet_ok ? "Up" : "Down"} for ${fmtDur(n.now - net.since)} · since ${fmtWhen(net.since)}` }, st);
+  }
+  const stat = (label, value, note) => {
+    const d = el("dl", { class: "stat", style: "margin:0" }, top);
+    el("dt", { text: label }, d);
+    const dd = el("dd", { text: value }, d);
+    if (note) el("small", { text: note }, dd);
+  };
+  const cov = (c, secs) => (c != null && c < 0.98 ? `from ${fmtDur(c * secs)} of data` : null);
+  stat("Uptime · 24h", fmtUptimePct(net.pct_24h), cov(net.coverage_24h, 86400));
+  stat("Uptime · 7d", fmtUptimePct(net.pct_7d), cov(net.coverage_7d, 604800));
+  stat("Uptime · 30d", fmtUptimePct(net.pct_30d), cov(net.coverage_30d, 2592000));
+  stat("Internet latency", fmtMs(net.inet_ms), net.targets.map((x) => `${x.host} ${x.ok ? fmtMs(x.ms) : "✕"}`).join(" · "));
+  stat("Traffic now", nic ? `↓ ${fmtBits(nic.rx_bps)}` : "—", nic ? `↑ ${fmtBits(nic.tx_bps)}` : null);
+
+  stripCells($("strip-24h"), net.strip_24h, (c) => `${fmtClock(c.start)}–${fmtClock(c.end)}`);
+  stripCells($("strip-30d"), net.strip_30d, (c) => fmtDay(c.start + 1));
+
+  const ul = $("outages");
+  ul.replaceChildren();
+  if (!net.outages.length) el("li", { class: "empty-note", text: "No internet outages recorded in the last 30 days." }, ul);
+  for (const o of net.outages.slice(0, 10)) {
+    const li = el("li", {}, ul);
+    const left = el("span", {}, li);
+    statusIcon("crit", left);
+    left.append(" " + fmtWhen(o.start));
+    el("span", { class: "dur", text: fmtDur(o.duration) }, li);
+  }
+}
+
+function headRow(table, cols) {
+  const tr = el("tr", {}, el("thead", {}, table));
+  for (const [label, cls] of cols) el("th", { text: label, class: cls }, tr);
+  return el("tbody", {}, table);
+}
+
+function renderStorage(n) {
+  const s = n.storage;
+  if (!s) return;
+  const pct = s.total ? (s.used / s.total) * 100 : null;
+  $("storage-meta").textContent = `Array ${String(s.array_state || "").toLowerCase()} · ${s.disks.length} devices`;
+  usageRow($("array-usage"), "Array capacity", s.used, s.total, pct, { warn: 90, crit: 97 });
+  const t = $("disks");
+  t.replaceChildren();
+  const body = headRow(t, [["Disk"], ["Role"], ["Usage"], ["Used", "num"], ["Size", "num"], ["Temp", "num"], ["Activity"], ["Health"]]);
+  for (const d of s.disks) {
+    const tr = el("tr", {}, body);
+    el("td", { class: "name-cell", text: d.name }, tr);
+    el("td", { class: "dim", text: d.kind === "parity" ? "Parity" : d.kind === "cache" ? "Cache pool" : "Data" }, tr);
+    const u = el("td", {}, tr);
+    if (d.kind === "parity" || d.used == null || !d.size) el("span", { class: "dim", text: "—" }, u);
+    else {
+      const p = (d.used / d.size) * 100;
+      const cm = el("div", { class: "cell-meter" }, u);
+      cm.appendChild(meter(p, { warn: 90, crit: 97, label: `${d.name} usage` }));
+      el("span", { text: fmtPct(p) }, cm);
+    }
+    el("td", { class: "num", text: d.kind === "parity" ? "—" : fmtBytes(d.used) }, tr);
+    el("td", { class: "num", text: fmtBytes(d.size) }, tr);
+    const hot = d.temp != null && d.temp >= (d.rotational === false ? 70 : 50);
+    const tt = el("td", { class: "num" }, tr);
+    if (hot) { statusIcon("warn", tt); tt.append(" "); }
+    tt.append(d.temp != null ? d.temp + " °C" : "—");
+    el("td", { class: "dim", text: d.rotational === false ? "Solid state" : d.spinning ? "Spinning" : "Spun down" }, tr);
+    const h = el("td", {}, tr);
+    const ok = d.status === "DISK_OK";
+    if (!ok) pill("crit", String(d.status || "Unknown").replace(/^DISK_/, "").replace(/_/g, " ").toLowerCase(), h);
+    else if (d.errors) pill("warn", `${d.errors} errors`, h);
+    else pill("good", "OK", h);
+  }
+}
+
+function containerKind(c) {
+  const st = String(c.state || "").toUpperCase(), status = c.status || "";
+  if (/^Restarting/i.test(status)) return ["serious", "Restarting", 0];
+  if (st === "RUNNING" && /unhealthy/i.test(status)) return ["warn", "Unhealthy", 1];
+  if (st === "RUNNING" && /health: starting/i.test(status)) return ["idle", "Starting", 3];
+  if (st === "RUNNING") return ["good", "Running", 4];
+  if (st === "PAUSED") return ["warn", "Paused", 2];
+  return c.autostart ? ["warn", "Stopped", 2] : ["idle", "Stopped", 5];
+}
+
+function renderDocker(n) {
+  const cs = n.containers, di = n.docker_img;
+  if (di) usageRow($("docker-usage"), "docker.img", di.used, di.total, di.pct, { warn: 75, crit: 90 });
+  if (!cs) return;
+  const running = cs.filter((c) => String(c.state).toUpperCase() === "RUNNING").length;
+  $("docker-meta").textContent = `${running} running · ${cs.length - running} stopped`;
+  const rows = cs.map((c) => ({ c, k: containerKind(c) }))
+    .sort((a, b) => a.k[2] - b.k[2] || a.c.name.localeCompare(b.c.name));
+  const t = $("containers");
+  t.replaceChildren();
+  const body = headRow(t, [["Container"], ["State"], ["Status"], ["Image + data", "num"], ["Writable layer", "num"], ["Logs", "num"], ["Autostart"]]);
+  for (const { c, k } of rows) {
+    const tr = el("tr", {}, body);
+    const nm = el("td", { class: "name-cell", text: c.name }, tr);
+    el("small", { text: c.image || "", title: c.image || "" }, nm);
+    pill(k[0], k[1], el("td", {}, tr));
+    el("td", { class: "dim", text: (c.status || "").replace(/\s*\((healthy|unhealthy|health: starting)\)/i, "") }, tr);
+    el("td", { class: "num", text: c.sizeRootFs != null ? fmtBytes(c.sizeRootFs) : "…" }, tr);
+    el("td", { class: "num", text: c.sizeRw != null ? fmtBytes(c.sizeRw) : c.sizeRootFs != null ? "0 B" : "…" }, tr);
+    el("td", { class: "num", text: c.sizeLog != null ? fmtBytes(c.sizeLog) : "…" }, tr);
+    el("td", { class: "dim", text: c.autostart ? "Yes" : "No" }, tr);
+  }
+}
+
+const ERROR_LABELS = { api: "Unraid API", storage: "Array / Docker", temps: "Temperatures", sizes: "Container sizes",
+  gpu: "iGPU", net: "Network checks", nic: "Network interface", transcode: "/transcode", docker_img: "docker.img", database: "Database" };
+function renderNotices(n) {
+  const host = $("notices");
+  host.replaceChildren();
+  for (const [k, msg] of Object.entries(n.errors || {})) {
+    if (k === "gpu") continue;   // shown inside the iGPU card
+    const d = el("div", { class: "notice" }, host);
+    statusIcon("warn", d);
+    const s = el("span", {}, d);
+    el("strong", { text: (ERROR_LABELS[k] || k) + ": " }, s);
+    s.append(msg);
+  }
+}
+
+function renderNow(n) {
+  last = n;
+  const h = n.host || {};
+  $("hostline").textContent = [h.cpu_model ? h.cpu_model.replace(/\(R\)|\(TM\)/g, "").replace(/\s+CPU\b/, "").replace(/\s+@.*$/, "") : null,
+    h.uptime ? `up ${fmtDur(h.uptime)}` : null].filter(Boolean).join(" · ");
+  renderNotices(n);
+  renderTiles(n);
+  renderCpu(n);
+  renderGpu(n);
+  renderMemory(n);
+  renderShm(n);
+  renderNet(n);
+  renderStorage(n);
+  renderDocker(n);
+}
+
+function renderHistory(h) {
+  const base = { start: h.start, end: h.end, step: h.step, t: h.t };
+  charts.cpu.set({ ...base, series: h.series });
+  charts.gpu.set({ ...base, series: h.series });
+  charts.mem.set({ ...base, series: h.series });
+  charts.shm.set({ ...base, series: h.series });
+  charts.nic.set({ ...base, series: h.series });
+  charts.lat.set({ start: h.start, end: h.end, step: h.latency.step, t: h.latency.t, series: h.latency });
+}
+
+/* ------------------------------------------------------------------ polling */
+async function getJSON(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+  return r.json();
+}
+let nowTimer = null, histTimer = null, histSeq = 0;
+async function pollNow() {
+  clearTimeout(nowTimer);
+  try { renderNow(await getJSON("api/now")); lastOk = Date.now(); fetchError = null; }
+  catch (e) { fetchError = e; }
+  renderLive();
+  nowTimer = setTimeout(pollNow, 3000);
+}
+async function pollHistory(immediate) {
+  clearTimeout(histTimer);
+  const seq = ++histSeq, want = range;
+  try {
+    const h = await getJSON("api/history?range=" + encodeURIComponent(want));
+    if (seq === histSeq) renderHistory(h);
+  } catch (e) { fetchError = e; }
+  if (seq === histSeq) histTimer = setTimeout(pollHistory, ["5m", "15m", "1h"].includes(range) ? 3000 : 30000);
+}
+setInterval(renderLive, 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollNow(); pollHistory(true); } });
+pollNow();
+pollHistory(true);
+</script>
+</body>
+</html>

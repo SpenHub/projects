@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>girthy-dash</Name>
+  <Repository>girthy-dash:1.0</Repository>
+  <Registry/>
+  <Network>host</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Overview>Monitoring dashboard for girthy: CPU, iGPU, RAM, swap, storage, Docker, /transcode and internet uptime, plus a disk-usage explorer with Radarr/Sonarr release removal. Locally built image; source in the Homelab repo (unraid/docker/girthy-dash).</Overview>
+  <Category>Tools: Status:</Category>
+  <WebUI>http://[IP]:7879/</WebUI>
+  <ExtraParams>--restart unless-stopped --cap-drop ALL --cap-add PERFMON --cap-add NET_RAW --cap-add DAC_READ_SEARCH --security-opt no-new-privileges --device /dev/dri:/dev/dri</ExtraParams>
+  <PostArgs/>
+  <Config Name="Data" Target="/data" Default="/mnt/cache/appdata/girthy-dash/data" Mode="rw" Description="SQLite history (metrics + network checks)" Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata/girthy-dash/data</Config>
+  <Config Name="API key file" Target="/config/api_key" Default="/mnt/cache/appdata/girthy-dash/api_key" Mode="ro" Description="Read-only (VIEWER) Unraid API key" Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata/girthy-dash/api_key</Config>
+  <Config Name="Transcode ramdisk" Target="/host/transcode" Default="/dev/shm" Mode="ro" Description="Host /dev/shm (Plex /transcode)" Type="Path" Display="advanced" Required="true" Mask="false">/dev/shm</Config>
+  <Config Name="Docker storage" Target="/host/docker" Default="/var/lib/docker" Mode="ro" Description="docker.img mount, used only for disk usage" Type="Path" Display="advanced" Required="true" Mask="false">/var/lib/docker</Config>
+  <Config Name="Network interface" Target="NET_IFACE" Default="br0" Mode="" Description="Interface for throughput" Type="Variable" Display="advanced" Required="false" Mask="false">br0</Config>
+  <Config Name="Ping targets" Target="PING_TARGETS" Default="1.1.1.1,8.8.8.8" Mode="" Description="Internet is up if any target answers" Type="Variable" Display="advanced" Required="false" Mask="false">1.1.1.1,8.8.8.8</Config>
+  <Config Name="User shares" Target="/host/user" Default="/mnt/user" Mode="ro" Description="Scanned for the disk-usage explorer" Type="Path" Display="advanced" Required="true" Mask="false">/mnt/user</Config>
+  <Config Name="Arr config" Target="/config/arr.json" Default="/mnt/cache/appdata/girthy-dash/arr.json" Mode="ro" Description="Radarr/Sonarr URLs + API keys + path map" Type="Path" Display="advanced" Required="false" Mask="false">/mnt/cache/appdata/girthy-dash/arr.json</Config>
+  <Config Name="Docker control key" Target="/config/docker_key" Default="/mnt/cache/appdata/girthy-dash/docker_key" Mode="ro" Description="Unraid API key with DOCKER:UPDATE_ANY, used only by the Restart button" Type="Path" Display="advanced" Required="false" Mask="false">/mnt/cache/appdata/girthy-dash/docker_key</Config>
+  <Config Name="Local time" Target="/etc/localtime" Default="/etc/localtime" Mode="ro" Description="Host time zone (nightly scan hour)" Type="Path" Display="advanced" Required="false" Mask="false">/etc/localtime</Config>
+  <Config Name="Scan hour" Target="SCAN_HOUR" Default="5" Mode="" Description="Daily full storage rescan at this hour (-1 disables)" Type="Variable" Display="advanced" Required="false" Mask="false">5</Config>
+</Container>

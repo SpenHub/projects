@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>girthy docker</title>
+<meta name="theme-color" content="#000000">
+<link rel="preload" href="fonts/atkinson-hyperlegible-next-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-mono-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<style>
+.btn { font: 700 12.5px "Atkinson Hyperlegible Next", sans-serif; letter-spacing: .04em; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px var(--glow); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.danger { background: var(--crit); border-color: var(--crit); color: #000; }
+.btn.danger:hover:not(:disabled) { color: #000; border-color: var(--crit); filter: brightness(1.1);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--crit) 55%, transparent); }
+.btn.warnish { background: var(--warn); border-color: var(--warn); color: #000; }
+.btn.warnish:hover:not(:disabled) { color: #000; border-color: var(--warn); filter: brightness(1.1); }
+.btn.small { padding: 3px 9px; font-size: 11.5px; }
+
+.toolbar { display: flex; align-items: center; gap: 10px 14px; margin: 18px 0 14px; flex-wrap: wrap; }
+.toolbar .spacer { flex: 1; }
+.updated { color: var(--muted); font-size: 12.5px; display: inline-flex; gap: 8px; align-items: center; }
+.search { background: #000; color: var(--ink); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px;
+  font: 500 13px var(--mono); min-width: 180px; flex: 1; max-width: 300px; }
+.search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.search::placeholder { color: var(--muted); }
+
+#ctable td { vertical-align: middle; }
+#ctable tr.crow { cursor: pointer; }
+#ctable tr.crow:focus-visible td { outline: none; background: var(--hover); }
+.cname { display: flex; flex-direction: column; min-width: 0; }
+.cname strong { color: var(--ink); font-weight: 700; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.cname small { color: var(--muted); font-size: 11.5px; font-family: var(--mono); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.caret { color: var(--muted); font-size: 11px; width: 10px; display: inline-block; }
+.metric { display: flex; align-items: center; gap: 8px; justify-content: flex-end; white-space: nowrap; }
+.metric .v { font-family: var(--mono); font-size: 12.5px; color: var(--ink); min-width: 62px; text-align: right; }
+.spark { width: 84px; height: 22px; display: block; flex: none; }
+.spark path.line { fill: none; stroke: var(--accent); stroke-width: 1.5; filter: drop-shadow(0 0 3px var(--glow)); }
+.spark path.area { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: none; }
+.io { font-family: var(--mono); font-size: 12px; color: var(--ink2); white-space: nowrap; line-height: 1.35; }
+.io span { color: var(--muted); }
+.mini-strip { display: grid; grid-template-columns: repeat(48, 3px); gap: 1px; }
+.mini-strip i { height: 14px; border-radius: 1px; background: var(--grid); }
+.mini-strip i.good { background: var(--good); } .mini-strip i.partial { background: var(--serious); } .mini-strip i.down { background: var(--crit); }
+.upcell { display: flex; flex-direction: column; gap: 3px; }
+.upcell small { color: var(--ink2); font-family: var(--mono); font-size: 11.5px; }
+.badge { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; border: 1px solid var(--warn); color: var(--warn);
+  border-radius: 999px; padding: 0 6px; }
+.badge.dim { border-color: var(--border); color: var(--muted); }
+
+tr.detail > td { background: var(--surface-2); padding: 14px 16px 16px; }
+tr.detail:hover > td { background: var(--surface-2); }
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 900px) { .detail-grid { grid-template-columns: minmax(0, 1fr); } }
+.detail h4 { margin: 0 0 8px; font-size: 12px; color: var(--accent); letter-spacing: .05em; text-transform: uppercase; }
+.detail .facts { margin-top: 0; }
+.detail .strip .cell { height: 20px; }
+.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.ev { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; }
+.ev li { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: start; }
+.ev time { color: var(--muted); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+.ev .what { color: var(--ink); }
+.ev .what small { color: var(--muted); display: block; }
+.ev-scroll { max-height: 420px; overflow: auto; }
+
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr 70px; gap: 10px; align-items: center; font-size: 12.5px; }
+.bar-row .n { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-row .v { font-family: var(--mono); text-align: right; color: var(--ink2); font-size: 12px; }
+.bar-row .track { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.bar-row .track div { height: 100%; background: var(--accent); box-shadow: 0 0 8px var(--glow); border-radius: 4px; }
+.bar-row.alt .track div { background: var(--accent-2); box-shadow: none; }
+
+dialog { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px; padding: 0;
+  width: min(480px, calc(100vw - 32px)); box-shadow: var(--shadow); }
+dialog::backdrop { background: rgba(0,0,0,.72); }
+.dlg-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.dlg-head h3 { margin: 0; font-size: 15px; color: var(--accent); letter-spacing: .04em; }
+.dlg-head p { margin: 4px 0 0; color: var(--ink2); font-size: 13px; }
+.dlg-body { padding: 14px 18px; display: grid; gap: 10px; }
+.dlg-note { font-size: 12.5px; color: var(--ink2); display: flex; gap: 8px; align-items: flex-start; }
+.dlg-error { color: var(--crit); font-size: 13px; }
+.dlg-foot { padding: 12px 18px 16px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--grid); }
+
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; background: var(--surface);
+  border: 1px solid var(--accent); color: var(--ink); border-radius: 10px; padding: 10px 14px; font-size: 13px; max-width: min(560px, calc(100vw - 32px));
+  box-shadow: 0 0 22px var(--glow); display: flex; gap: 10px; align-items: flex-start; }
+#toast[hidden] { display: none; }
+@media (max-width: 700px) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>girthy</h1>
+      <div class="sub">Docker · containers, health &amp; uptime</div>
+    </div>
+    <div class="top-right">
+      <nav class="tabs" aria-label="Pages"><a href="./">Home</a><a href="storage">Storage</a><a href="docker" aria-current="page">Docker</a></nav>
+      <div class="theme-picker" role="group" aria-label="Accent color">
+        <span class="theme-picker-label">Accent</span>
+        <div class="swatches" id="swatches"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <input class="search" id="filter" type="search" placeholder="Filter containers" aria-label="Filter containers">
+    <div class="seg" id="sort" role="group" aria-label="Sort by">
+      <button type="button" data-sort="name" aria-pressed="true">Name</button>
+      <button type="button" data-sort="cpu" aria-pressed="false">CPU</button>
+      <button type="button" data-sort="mem" aria-pressed="false">Memory</button>
+      <button type="button" data-sort="uptime" aria-pressed="false">Uptime</button>
+    </div>
+    <span class="spacer"></span>
+    <span class="updated" id="updated"></span>
+  </div>
+
+  <div class="notices" id="notices"></div>
+  <section class="tiles" id="tiles" aria-label="Summary"></section>
+
+  <main class="grid">
+    <article class="card wide">
+      <div class="card-head"><h2>Containers</h2><span class="meta" id="c-meta"></span></div>
+      <div class="table-wrap"><table id="ctable"></table></div>
+      <div class="strip-legend" id="legend"></div>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><h2>CPU now</h2><span class="meta">100% = one full thread</span></div>
+      <div class="bars" id="cpu-bars"></div>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><h2>Memory now</h2><span class="meta" id="mem-meta"></span></div>
+      <div class="bars" id="mem-bars"></div>
+    </article>
+
+    <article class="card wide">
+      <div class="card-head"><h2>Recent events</h2><span class="meta">starts, stops, restarts and health changes</span></div>
+      <div class="ev-scroll"><ul class="ev" id="events"></ul></div>
+    </article>
+  </main>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg-title"></dialog>
+<div id="toast" hidden role="status" aria-live="polite"></div>
+<div id="tip" hidden role="status"></div>
+<script src="common.js"></script>
+<script src="docker.js"></script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>girthy storage</title>
+<meta name="theme-color" content="#000000">
+<link rel="preload" href="fonts/atkinson-hyperlegible-next-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-mono-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<style>
+:root { --k-audio: #e6e6e6; --k-archive: #8a8a8a; --k-other: #4d4d4d; }
+
+.btn { font: 700 12.5px "Atkinson Hyperlegible Next", sans-serif; letter-spacing: .04em; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px var(--glow); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+.btn.primary:hover:not(:disabled) { color: #000; filter: brightness(1.1); }
+.btn.danger { background: var(--crit); border-color: var(--crit); color: #000; }
+.btn.danger:hover:not(:disabled) { color: #000; border-color: var(--crit); filter: brightness(1.1);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--crit) 55%, transparent); }
+.btn.small { padding: 3px 9px; font-size: 11.5px; }
+
+.toolbar { display: flex; align-items: center; gap: 10px 14px; margin: 18px 0 14px; flex-wrap: wrap; }
+.toolbar .spacer { flex: 1; }
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-family: var(--mono); font-size: 13px; min-width: 0; }
+.crumbs button { background: none; border: 0; color: var(--ink2); font: inherit; padding: 3px 5px; border-radius: 5px; cursor: pointer; }
+.crumbs button:hover { color: var(--accent); background: var(--hover); }
+.crumbs button[aria-current="location"] { color: var(--accent); font-weight: 700; cursor: default;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent); }
+.crumbs .sep { color: var(--muted); }
+.scan-status { color: var(--muted); font-size: 12.5px; display: inline-flex; align-items: center; gap: 8px; }
+.scan-status strong { color: var(--ink2); font-family: var(--mono); font-weight: 600; }
+
+.treemap { position: relative; height: 460px; border-radius: 8px; overflow: hidden; background: #000; border: 1px solid var(--border); }
+@media (max-width: 700px) { .treemap { height: 320px; } }
+.tm-cell { position: absolute; border: 1px solid; border-radius: 3px; overflow: hidden; padding: 4px 6px; font-size: 12px;
+  line-height: 1.25; outline: none; }
+.tm-cell.dir { cursor: pointer; }
+.tm-cell.group { border-style: dashed; }
+.tm-cell:hover, .tm-cell:focus-visible { z-index: 1; box-shadow: inset 0 0 0 1px var(--ink), 0 0 14px var(--glow); }
+.tm-name { color: var(--ink); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-size { font-family: var(--mono); color: var(--ink2); font-size: 11px; white-space: nowrap; }
+.tm-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 20px; }
+.treemap.map { height: 560px; }
+@media (max-width: 700px) { .treemap.map { height: 860px; } .treemap.map .tm-cell { padding: 2px 3px; font-size: 10.5px; } .treemap.map .tm-size { font-size: 10px; } }
+.tm-group { position: absolute; border: 1px solid var(--border); border-radius: 5px; background: #000; }
+.tm-group-head { position: absolute; left: 0; right: 0; top: 0; height: 20px; padding: 2px 7px; font-size: 11.5px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; background: none; border: 0; text-align: left; font-family: inherit; }
+.tm-group-head:hover, .tm-group-head:focus-visible { color: var(--accent); outline: none; }
+.tm-group-head span { color: var(--muted); font-family: var(--mono); font-weight: 500; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+.tm-cell.item { cursor: pointer; }
+.tm-cell.unmon { border-style: dashed; }
+.tm-cell.orphan { background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(255,255,255,.07) 6px 8px); }
+.map-hint { color: var(--muted); font-size: 12.5px; }
+.lg-swatch { width: 14px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid var(--ink2); }
+.item-facts { margin: 0; }
+.item-path { font-family: var(--mono); font-size: 11.5px; color: var(--muted); word-break: break-all; margin: 6px 0 0; }
+.dlg-foot .grow { flex: 1; }
+@media (max-width: 520px) { .dlg-foot { flex-wrap: wrap; } .dlg-foot .grow { display: none; } }
+.kind-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink2); margin: 10px 0 4px; }
+.kind-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--ink); font-weight: 700; cursor: pointer; text-align: left; }
+.linkish:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.linkish:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.ellip { display: inline-block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
+@media (max-width: 700px) { .ellip { max-width: 200px; } }
+.tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.tag i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--glow); }
+.tag.off i { background: var(--idle); box-shadow: none; }
+.kdot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+td .share { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+td .share .meter { flex: 1; }
+td .share span { width: 46px; text-align: right; font-family: var(--mono); font-size: 12px; color: var(--ink2); }
+
+.segbar { display: flex; gap: 2px; height: 10px; margin: 2px 0 12px; }
+.segbar div { height: 100%; border-radius: 5px; min-width: 3px; }
+
+.arr-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap;
+  border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--surface); border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 12px; font-size: 13px; }
+.arr-banner strong { color: var(--accent); }
+
+.lib-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.search { background: #000; color: var(--ink); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px;
+  font: 500 13px var(--mono); min-width: 200px; flex: 1; max-width: 340px; }
+.search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.search::placeholder { color: var(--muted); }
+tr.season td { background: color-mix(in srgb, var(--accent) 3%, transparent); }
+tr.season td:first-child { padding-left: 34px; color: var(--ink2); }
+
+dialog { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px; padding: 0;
+  width: min(520px, calc(100vw - 32px)); box-shadow: var(--shadow); }
+dialog::backdrop { background: rgba(0,0,0,.72); }
+.dlg-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.dlg-head h3 { margin: 0; font-size: 15px; color: var(--accent); letter-spacing: .04em; }
+.dlg-head p { margin: 4px 0 0; color: var(--ink2); font-size: 13px; }
+.dlg-body { padding: 14px 18px; display: grid; gap: 10px; }
+.opt { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--grid);
+  border-radius: 8px; cursor: pointer; }
+.opt:hover { border-color: var(--border); }
+.opt:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 20%, transparent); }
+.opt input { margin: 3px 0 0; accent-color: var(--accent); }
+.opt strong { font-size: 13.5px; }
+.opt small { grid-column: 2; color: var(--muted); font-size: 12px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink2); padding: 0 2px; }
+.check input { accent-color: var(--accent); }
+.check:has(input:disabled) { opacity: .45; }
+.dlg-note { font-size: 12.5px; color: var(--ink2); display: flex; gap: 8px; align-items: flex-start; }
+.dlg-error { color: var(--crit); font-size: 13px; }
+.dlg-foot { padding: 12px 18px 16px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--grid); }
+
+.table-wrap.tall { max-height: 540px; overflow: auto; border-top: 1px solid var(--grid); }
+@media (max-width: 700px) { .table-wrap.tall { max-height: 440px; } }
+.table-wrap.tall thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); }
+.table-wrap.tall.on-card thead th { background: var(--surface-2); }
+
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; background: var(--surface);
+  border: 1px solid var(--accent); color: var(--ink); border-radius: 10px; padding: 10px 14px; font-size: 13px; max-width: min(560px, calc(100vw - 32px));
+  box-shadow: 0 0 22px var(--glow); display: flex; gap: 10px; align-items: flex-start; }
+#toast[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>girthy</h1>
+      <div class="sub">Storage · disk usage &amp; media library</div>
+    </div>
+    <div class="top-right">
+      <nav class="tabs" aria-label="Pages"><a href="./">Home</a><a href="storage" aria-current="page">Storage</a><a href="docker">Docker</a></nav>
+      <div class="theme-picker" role="group" aria-label="Accent color">
+        <span class="theme-picker-label">Accent</span>
+        <div class="swatches" id="swatches"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <nav class="crumbs" id="crumbs" aria-label="Folder path"></nav>
+    <span class="spacer"></span>
+    <span class="scan-status" id="scan-status"></span>
+    <button class="btn" id="rescan" type="button">Rescan</button>
+  </div>
+
+  <div class="notices" id="notices"></div>
+  <section class="tiles" id="tiles" aria-label="Summary"></section>
+
+  <main class="grid">
+    <article class="card wide">
+      <div class="card-head"><h2>Media map</h2><span class="meta" id="map-meta"></span></div>
+      <div class="lib-toolbar">
+        <div class="seg" id="map-tabs" role="group" aria-label="Show on the map">
+          <button type="button" data-tab="all" aria-pressed="true">All</button>
+          <button type="button" data-tab="movies" aria-pressed="false">Movies</button>
+          <button type="button" data-tab="shows" aria-pressed="false">Shows</button>
+          <button type="button" data-tab="other" aria-pressed="false">Other</button>
+        </div>
+        <span class="map-hint">Tap a block for details</span>
+      </div>
+      <div class="treemap map" id="map" aria-label="Media map of /mnt/user/data"></div>
+      <div class="kind-legend" id="map-legend"></div>
+    </article>
+
+    <article class="card wide">
+      <div class="card-head"><h2 id="folder-title">Disk usage</h2><span class="meta" id="folder-meta"></span></div>
+      <div id="folder-arr"></div>
+      <div class="table-wrap tall"><table id="children"></table></div>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><h2>File types</h2><span class="meta">everything in this folder</span></div>
+      <div class="segbar" id="kind-bar"></div>
+      <div class="kind-legend" id="kind-legend" style="margin-top:-4px;margin-bottom:10px"></div>
+      <div class="table-wrap"><table id="exts"></table></div>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><h2>Largest files</h2><span class="meta">everything in this folder</span></div>
+      <div class="table-wrap"><table id="largest"></table></div>
+    </article>
+
+    <article class="card wide">
+      <div class="card-head"><h2>Media library</h2><span class="meta" id="lib-meta"></span></div>
+      <div class="lib-toolbar">
+        <div class="seg" id="lib-tabs" role="group" aria-label="Library">
+          <button type="button" data-tab="movies" aria-pressed="true">Movies</button>
+          <button type="button" data-tab="series" aria-pressed="false">Shows</button>
+        </div>
+        <input class="search" id="lib-search" type="search" placeholder="Filter titles" aria-label="Filter titles">
+      </div>
+      <div id="lib-note"></div>
+      <div class="table-wrap tall"><table id="library"></table></div>
+    </article>
+  </main>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg-title"></dialog>
+<div id="toast" hidden role="status" aria-live="polite"></div>
+<div id="tip" hidden role="status"></div>
+<script src="common.js"></script>
+<script src="storage.js"></script>
+</body>
+</html>
